@@ -9,6 +9,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <fstream>
 #include "tinyexpr.h"
 
 using namespace std;
@@ -23,14 +24,6 @@ public:
 	element(vector<double> p, string function) {
 		point = p;
 		functionValue = evaluateFunction(p, function);
-	}
-	void print() {
-		cout << "X=(";
-		for (int i = 0; i < point.size(); ++i) {
-			cout << point[i];
-			if (i < point.size() - 1) cout << ", ";
-		}
-		std::cout << ")" << " F(X)=" << functionValue << endl;
 	}
 };
 
