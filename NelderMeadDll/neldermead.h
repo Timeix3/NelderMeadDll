@@ -14,20 +14,20 @@
 
 using namespace std;
 
-extern "C" MYDLL_API double evaluateFunction(vector<double> point, string function);
+double evaluateFunction(vector<double> point, char* function);
 
 class element {
 public:
 	vector<double> point;
 	double functionValue;
 	element() : point({ 0, 0 }), functionValue(0) {}
-	element(vector<double> p, string function) {
+	element(vector<double> p, char* function) {
 		point = p;
 		functionValue = evaluateFunction(p, function);
 	}
 };
 
-vector<element> makeStartSimplex(int varsCount, double scale, vector<double> startingPoint, string expression);
+vector<element> makeStartSimplex(int varsCount, double scale, vector<double> startingPoint, char* function);
 vector<double> operator*(const vector<double>& vec, double scalar);
 vector<double> operator/(const vector<double>& vec, double scalar);
 vector<double> operator+(const vector<double>& vec1, const vector<double>& vec2);
@@ -35,5 +35,6 @@ vector<double> operator-(const vector<double>& vec1, const vector<double>& vec2)
 vector<double> calculateMassCenter(vector<element> elements);
 bool compare(const element a, const element b);
 bool endCheck(double eps, vector<element> elements);
-element calculateContraction(vector<element> elements, element reflection, vector<double> massCenter, double contractionCoeff, string expression);
-extern "C" MYDLL_API vector<double> findFunctionMinimum(int varsCount, vector<double> startingPoint, string function);
+element calculateContraction(vector<element> elements, element reflection, vector<double> massCenter, double contractionCoeff, char* function);
+extern "C" MYDLL_API double* findFunctionMinimum(int varsCount, double* startingPointRaw, char* function);
+extern "C" MYDLL_API double evaluateFunctionImport(double* pointRaw, int size, char* function);

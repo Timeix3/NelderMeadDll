@@ -1,8 +1,25 @@
-
 #include "pch.h"
 #include "neldermead.h"
 
-double evaluateFunction(vector<double> point, string function) {
+double evaluateFunctionImport(double* pointRaw, int size, char* function) {
+	te_parser tep;
+	set<te_variable> variables;
+	vector<double> point(pointRaw, pointRaw + size);
+	for (int i = 0; i < point.size(); i++)
+		variables.insert({ "x" + to_string(i + 1), &point[i] });
+	tep.set_variables_and_functions(variables);
+	double result = tep.evaluate(function);
+	try {
+		if (!tep.success()) throw runtime_error("Incorrect expression");
+	}
+	catch (const runtime_error& e) {
+		cerr << "Error: " << e.what() << endl;
+		exit(-1);
+	}
+	return result;
+}
+
+double evaluateFunction(vector<double> point, char* function) {
 	te_parser tep;
 	set<te_variable> variables;
 	for (int i = 0; i < point.size(); i++)
@@ -19,7 +36,7 @@ double evaluateFunction(vector<double> point, string function) {
 	return result;
 }
 
-vector<element> makeStartSimplex(int varsCount, double scale, vector<double> startingPoint, string function) {
+vector<element> makeStartSimplex(int varsCount, double scale, vector<double> startingPoint, char* function) {
 	vector<element> elements;
 	elements.push_back(element(startingPoint, function));
 	for (int i = 0; i < varsCount; i++) {
@@ -83,7 +100,7 @@ bool endCheck(double eps, vector<element> elements) {
 	return (sqrt(sum / (elements.size() - 1)) <= eps);
 }
 
-element calculateContraction(vector<element> elements, element reflection, vector<double> massCenter, double contractionCoeff, string function)
+element calculateContraction(vector<element> elements, element reflection, vector<double> massCenter, double contractionCoeff, char* function)
 {
 	element contraction;
 	if (elements.back().functionValue <= reflection.functionValue)
@@ -103,12 +120,13 @@ string vectorToString(vector<double> point, int number) {
 	return str;
 }
 
-vector<double> findFunctionMinimum(int varsCount, vector<double> startingPoint, string function) {
+double* findFunctionMinimum(int varsCount, double* startingPointRaw, char* function) {
 	double reflectionCoeff = 1;
 	double contractionCoeff = 0.5;
 	double expansionCoeff = 2;
 	double scale = 1;
 	double eps = 0.001;
+	vector<double> startingPoint(startingPointRaw, startingPointRaw + varsCount);
 	ofstream out;
 	out.open("log.txt");
 	vector<element> elements = makeStartSimplex(varsCount, scale, startingPoint, function);
@@ -150,5 +168,7 @@ vector<double> findFunctionMinimum(int varsCount, vector<double> startingPoint, 
 	}
 	out << "Лучшее решение: " << vectorToString(elements.front().point, -1) << endl;
 	out.close();
-	return elements.front().point;
+	double* res = new double[varsCount];
+	copy(elements.front().point.begin(), elements.front().point.end(), res);
+	return res;
 }
