@@ -27,6 +27,8 @@ public:
 	}
 };
 
+typedef void (*PointsCallback)(double* point);
+void sendPoints(PointsCallback callback, vector<element> elements);
 vector<element> makeStartSimplex(int varsCount, double scale, vector<double> startingPoint, char* function);
 vector<double> operator*(const vector<double>& vec, double scalar);
 vector<double> operator/(const vector<double>& vec, double scalar);
@@ -36,5 +38,5 @@ vector<double> calculateMassCenter(vector<element> elements);
 bool compare(const element a, const element b);
 bool endCheck(double eps, vector<element> elements);
 element calculateContraction(vector<element> elements, element reflection, vector<double> massCenter, double contractionCoeff, char* function);
-extern "C" MYDLL_API double* findFunctionMinimum(int varsCount, double* startingPointRaw, char* function);
-extern "C" MYDLL_API double evaluateFunctionImport(double* pointRaw, int size, char* function);
+extern "C" MYDLL_API double* findFunctionMinimum(PointsCallback callback, int varsCount, double* startingPointPtr, char* function);
+extern "C" MYDLL_API double evaluateFunctionImport(double* pointPtr, int size, char* function);

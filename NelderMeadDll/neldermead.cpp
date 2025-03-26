@@ -1,10 +1,10 @@
 #include "pch.h"
 #include "neldermead.h"
 
-double evaluateFunctionImport(double* pointRaw, int size, char* function) {
+double evaluateFunctionImport(double* pointPtr, int size, char* function) {
 	te_parser tep;
 	set<te_variable> variables;
-	vector<double> point(pointRaw, pointRaw + size);
+	vector<double> point(pointPtr, pointPtr + size);
 	for (int i = 0; i < point.size(); i++)
 		variables.insert({ "x" + to_string(i + 1), &point[i] });
 	tep.set_variables_and_functions(variables);
@@ -120,20 +120,29 @@ string vectorToString(vector<double> point, int number) {
 	return str;
 }
 
-double* findFunctionMinimum(int varsCount, double* startingPointRaw, char* function) {
+void sendPoints(PointsCallback callback, vector<element> elements) {
+	for (int i = 0; i < elements.size(); i++) {
+		callback(elements[i].point.data());
+	}
+}
+
+double* findFunctionMinimum(PointsCallback callback, int varsCount, double* startingPointPtr, char* function) {
 	double reflectionCoeff = 1;
 	double contractionCoeff = 0.5;
 	double expansionCoeff = 2;
 	double scale = 1;
 	double eps = 0.001;
-	vector<double> startingPoint(startingPointRaw, startingPointRaw + varsCount);
+	int maxSteps = 200;
+	vector<double> startingPoint(startingPointPtr, startingPointPtr + varsCount);
 	ofstream out;
 	out.open("log.txt");
 	vector<element> elements = makeStartSimplex(varsCount, scale, startingPoint, function);
 	int k = 0;
 	for (;;) {
 		sort(begin(elements), end(elements), compare);
-		if (endCheck(eps, elements) || k == 200) break;
+		if (callback != nullptr)
+			sendPoints(callback, elements);
+		if (endCheck(eps, elements) || k == maxSteps) break;
 		k++;
 		out << "Шаг №" << k << endl;
 		out << "Вершины симплекса: " << endl;
