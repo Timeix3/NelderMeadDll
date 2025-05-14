@@ -9,13 +9,7 @@ double evaluateFunctionImport(double* pointPtr, int size, char* function) {
 		variables.insert({ "x" + to_string(i + 1), &point[i] });
 	tep.set_variables_and_functions(variables);
 	double result = tep.evaluate(function);
-	try {
-		if (!tep.success()) throw runtime_error("Incorrect expression");
-	}
-	catch (const runtime_error& e) {
-		cerr << "Error: " << e.what() << endl;
-		exit(-1);
-	}
+    if (!tep.success()) throw runtime_error("Incorrect expression");
 	return result;
 }
 
@@ -26,13 +20,7 @@ double evaluateFunction(vector<double> point, char* function) {
 		variables.insert({ "x" + to_string(i + 1), &point[i] });
 	tep.set_variables_and_functions(variables);
 	double result = tep.evaluate(function);
-	try {
-		if (!tep.success()) throw runtime_error("Incorrect expression");
-	}
-	catch (const runtime_error& e) {
-		cerr << "Error: " << e.what() << endl;
-		exit(-1);
-	}
+    if (!tep.success()) throw runtime_error("Incorrect expression");
 	return result;
 }
 
@@ -132,7 +120,7 @@ double* findFunctionMinimum(PointsCallback callback, int varsCount, double* star
 	double expansionCoeff = 2;
 	double scale = 1;
 	double eps = 0.001;
-	int maxSteps = 200;
+	int maxSteps = 500;
 	vector<double> startingPoint(startingPointPtr, startingPointPtr + varsCount);
 	ofstream out;
 	out.open("log.txt");
