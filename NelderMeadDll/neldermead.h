@@ -11,6 +11,7 @@
 #include <vector>
 #include <fstream>
 #include "tinyexpr.h"
+#include "json.hpp"
 
 using namespace std;
 
@@ -25,6 +26,15 @@ public:
 		point = p;
 		functionValue = evaluateFunction(p, function);
 	}
+};
+
+struct NelderMeadParams {
+	double reflectionCoeff;
+	double contractionCoeff;
+	double expansionCoeff;
+	double scale;
+	double eps;
+	int maxSteps;
 };
 
 typedef void (*PointsCallback)(double* point);

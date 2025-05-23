@@ -141,6 +141,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="framework.h" />
+    <ClInclude Include="json.hpp" />
     <ClInclude Include="neldermead.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="tinyexpr.h" />

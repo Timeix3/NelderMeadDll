@@ -10,5 +10,6 @@
 // Добавьте сюда заголовочные файлы для предварительной компиляции
 #include "framework.h"
 #include "tinyexpr.h"
+#include "json.hpp"
 
 #endif //PCH_H

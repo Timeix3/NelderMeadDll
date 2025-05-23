@@ -97,7 +97,7 @@ element calculateContraction(vector<element> elements, element reflection, vecto
 	return contraction;
 }
 
-string vectorToString(vector<double> point, int number) {
+string printVector(vector<double> point, int number) {
 	string str = "X" + to_string(number) + "=(";
 	if (number == -1) str = "(";
 	for (int i = 0; i < point.size(); ++i) {
@@ -114,47 +114,82 @@ void sendPoints(PointsCallback callback, vector<element> elements) {
 	}
 }
 
+void to_json(nlohmann::json& j, const NelderMeadParams& p) {
+	j = nlohmann::json{
+		{"reflectionCoeff", p.reflectionCoeff},
+		{"contractionCoeff", p.contractionCoeff},
+		{"expansionCoeff", p.expansionCoeff},
+		{"scale", p.scale},
+		{"eps", p.eps},
+		{"maxSteps", p.maxSteps}
+	};
+}
+
+void from_json(const nlohmann::json& j, NelderMeadParams& p) {
+	j.at("reflectionCoeff").get_to(p.reflectionCoeff);
+	j.at("contractionCoeff").get_to(p.contractionCoeff);
+	j.at("expansionCoeff").get_to(p.expansionCoeff);
+	j.at("scale").get_to(p.scale);
+	j.at("eps").get_to(p.eps);
+	j.at("maxSteps").get_to(p.maxSteps);
+}
+
+
+NelderMeadParams loadConfig() {
+	NelderMeadParams params;
+	try {
+		ifstream in("config.json");
+		nlohmann::json j;
+		in >> j;
+		params = j.get<NelderMeadParams>();
+		in.close();
+	}
+	catch (...) {
+		params = { 1.0, 0.5, 2.0, 1.0, 0.001, 500 };
+		nlohmann::json j = params;
+		ofstream out("config.json");
+		out << j.dump(4);
+		out.close();
+	}
+	return params;
+}
+
 double* findFunctionMinimum(PointsCallback callback, int varsCount, double* startingPointPtr, char* function) {
-	double reflectionCoeff = 1;
-	double contractionCoeff = 0.5;
-	double expansionCoeff = 2;
-	double scale = 1;
-	double eps = 0.001;
-	int maxSteps = 500;
+	NelderMeadParams params = loadConfig();
 	vector<double> startingPoint(startingPointPtr, startingPointPtr + varsCount);
 	ofstream out;
 	out.open("log.txt");
-	vector<element> elements = makeStartSimplex(varsCount, scale, startingPoint, function);
+	vector<element> elements = makeStartSimplex(varsCount, params.scale, startingPoint, function);
 	int k = 0;
 	for (;;) {
 		sort(begin(elements), end(elements), compare);
 		if (callback != nullptr)
 			sendPoints(callback, elements);
-		if (endCheck(eps, elements) || k == maxSteps) break;
+		if (endCheck(params.eps, elements) || k == params.maxSteps) break;
 		k++;
 		out << "Шаг №" << k << endl;
 		out << "Вершины симплекса: " << endl;
 		for (int i = 0; i < elements.size(); i++)
 		{
-			out << vectorToString(elements[i].point,i);
+			out << printVector(elements[i].point,i);
 			if (i < elements.size() - 1) out << ", ";
 		}
 		out << endl;
 		vector<double> massCenter = calculateMassCenter(elements);
-		element reflection = element(massCenter * (1 + reflectionCoeff) - elements.back().point * reflectionCoeff, function);
-		out << "Отражение: " << vectorToString(reflection.point, -1) << endl;
+		element reflection = element(massCenter * (1 + params.reflectionCoeff) - elements.back().point * params.reflectionCoeff, function);
+		out << "Отражение: " << printVector(reflection.point, -1) << endl;
 		if (elements.front().functionValue <= reflection.functionValue && reflection.functionValue <= elements.at(elements.size() - 2).functionValue) {
 			elements.back() = reflection;
 		}
 		else if (reflection.functionValue < elements.front().functionValue) {
-			element expansion = element(massCenter * (1 - expansionCoeff) + reflection.point * expansionCoeff, function);
-			out << "Растяжение: " << vectorToString(expansion.point, -1) << endl;
+			element expansion = element(massCenter * (1 - params.expansionCoeff) + reflection.point * params.expansionCoeff, function);
+			out << "Растяжение: " << printVector(expansion.point, -1) << endl;
 			if (expansion.functionValue < reflection.functionValue) elements.back() = expansion;
 			else elements.back() = reflection;
 		}
 		else {
-			element contraction = calculateContraction(elements, reflection, massCenter, contractionCoeff, function);
-			out << "Сжатие: " << vectorToString(contraction.point, -1) << endl;
+			element contraction = calculateContraction(elements, reflection, massCenter, params.contractionCoeff, function);
+			out << "Сжатие: " << printVector(contraction.point, -1) << endl;
 			if (contraction.functionValue < min(elements.back().functionValue, reflection.functionValue))
 				elements.back() = contraction;
 			else {
@@ -163,9 +198,9 @@ double* findFunctionMinimum(PointsCallback callback, int varsCount, double* star
 			}
 		}
 	}
-	out << "Лучшее решение: " << vectorToString(elements.front().point, -1) << endl;
+	out << "Лучшее решение: " << printVector(elements.front().point, -1) << endl;
 	out.close();
 	double* res = new double[varsCount];
-	copy(elements.front().point.begin(), elements.front().point.end(), res);
+	std::copy(elements.front().point.begin(), elements.front().point.end(), res);
 	return res;
 }
