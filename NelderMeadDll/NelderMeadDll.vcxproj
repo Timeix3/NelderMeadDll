@@ -142,9 +142,11 @@
   <ItemGroup>
     <ClInclude Include="framework.h" />
     <ClInclude Include="json.hpp" />
+    <ClInclude Include="jsonSerializer.h" />
     <ClInclude Include="neldermead.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="tinyexpr.h" />
+    <ClInclude Include="vectorOps.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />

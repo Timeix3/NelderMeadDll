@@ -1,7 +1,20 @@
+#include <iostream>
+#include <fstream>
 #include "pch.h"
 #include "neldermead.h"
+#include "vectorOps.h"
+#include "jsonSerializer.h"
+#include "tinyexpr.h"
 
-double evaluateFunctionImport(double* pointPtr, int size, char* function) {
+double* findFunctionMinimum(pointsCallback callback, int varsCount, double* startingPointPtr, char* function) {
+	nelderMead* nelderMeadMethod = new nelderMead(callback, function);
+	vector<double> resultPoint = nelderMeadMethod->start(varsCount, startingPointPtr);
+	double* res = new double[varsCount];
+	std::copy(resultPoint.begin(), resultPoint.end(), res);
+	return res;
+}
+
+double evaluateFunction(double* pointPtr, int size, char* function) {
 	te_parser tep;
 	set<te_variable> variables;
 	vector<double> point(pointPtr, pointPtr + size);
@@ -13,194 +26,130 @@ double evaluateFunctionImport(double* pointPtr, int size, char* function) {
 	return result;
 }
 
-double evaluateFunction(vector<double> point, char* function) {
-	te_parser tep;
-	set<te_variable> variables;
-	for (int i = 0; i < point.size(); i++)
-		variables.insert({ "x" + to_string(i + 1), &point[i] });
-	tep.set_variables_and_functions(variables);
-	double result = tep.evaluate(function);
-    if (!tep.success()) throw runtime_error("Incorrect expression");
-	return result;
-}
-
-vector<element> makeStartSimplex(int varsCount, double scale, vector<double> startingPoint, char* function) {
-	vector<element> elements;
-	elements.push_back(element(startingPoint, function));
-	for (int i = 0; i < varsCount; i++) {
-		vector<double> newPoint(varsCount, 0);
-		newPoint[i] = scale;
-		elements.push_back(element(newPoint, function));
-	}
-	return elements;
-}
-
-vector<double> operator*(const vector<double>& vec, double scalar) {
-	vector<double> result(vec.size());
-	for (int i = 0; i < vec.size(); i++) {
-		result[i] = vec[i] * scalar;
-	}
-	return result;
-}
-
-vector<double> operator/(const vector<double>& vec, double scalar) {
-	vector<double> result(vec.size());
-	for (int i = 0; i < vec.size(); i++) {
-		result[i] = vec[i] / scalar;
-	}
-	return result;
-}
-
-vector<double> operator+(const vector<double>& vec1, const vector<double>& vec2) {
-	vector<double> result(vec1.size());
-	for (int i = 0; i < vec1.size(); i++) {
-		result[i] = vec1[i] + vec2[i];
-	}
-	return result;
-}
-
-vector<double> operator-(const vector<double>& vec1, const vector<double>& vec2) {
-	vector<double> result(vec1.size());
-	for (int i = 0; i < vec1.size(); i++) {
-		result[i] = vec1[i] - vec2[i];
-	}
-	return result;
-}
-
-vector<double> calculateMassCenter(vector<element> elements) {
-	vector<double> massCenter(elements.size() - 1);
-	for (int i = 0; i < elements.size() - 1; i++)
-		massCenter = massCenter + elements[i].point / (double)(elements.size() - 1);
-	return massCenter;
-}
-
-bool compare(const element a, const element b)
+nelderMead::nelderMead(pointsCallback callback, char* function)
 {
-	return a.functionValue < b.functionValue;
+	params = loadConfig();
+	out.open("log.txt");
+	this->callback = callback;
+	this->function = function;
 }
 
-bool endCheck(double eps, vector<element> elements) {
-	double sum = 0;
-	for (int i = 1; i < elements.size(); i++)
-	{
-		sum += pow(elements[i].functionValue - elements.front().functionValue, 2);
+vector<double> nelderMead::start(int varsCount, double* startingPointPtr)
+{
+	vector<double> startingPoint(startingPointPtr, startingPointPtr + varsCount);
+	makeStartSimplex(varsCount, startingPoint);
+	int k = 0;
+	for (int k = 0; k < params.maxSteps; k++) {
+		std::sort(simplex.begin(), simplex.end(),
+			[](const element& a, const element& b) {
+				return a.functionValue < b.functionValue;
+			}
+		);
+		if (callback != nullptr) sendPoints();
+		if (endCheck(params.eps, simplex)) break;
+		logSimplex(k);
+		changeSimplex();
 	}
-	return (sqrt(sum / (elements.size() - 1)) <= eps);
+	out << "Лучшее решение: " << printVector(simplex.front().point, -1) << endl;
+	out.close();
+	return simplex.front().point;
 }
 
-element calculateContraction(vector<element> elements, element reflection, vector<double> massCenter, double contractionCoeff, char* function)
+void nelderMead::changeSimplex()
+{
+	vector<double> massCenter = calculateMassCenter();
+	element reflection = element(massCenter * (1 + params.reflectionCoeff) - simplex.back().point * params.reflectionCoeff, function);
+	out << "Отражение: " << printVector(reflection.point, -1) << endl;
+	if (simplex.front().functionValue <= reflection.functionValue && reflection.functionValue <= simplex.at(simplex.size() - 2).functionValue) {
+		simplex.back() = reflection;
+	}
+	else if (reflection.functionValue < simplex.front().functionValue) {
+		element expansion = element(massCenter * (1 - params.expansionCoeff) + reflection.point * params.expansionCoeff, function);
+		out << "Растяжение: " << printVector(expansion.point, -1) << endl;
+		if (expansion.functionValue < reflection.functionValue) simplex.back() = expansion;
+		else simplex.back() = reflection;
+	}
+	else {
+		element contraction = calculateContraction(reflection, massCenter);
+		out << "Сжатие: " << printVector(contraction.point, -1) << endl;
+		if (contraction.functionValue < min(simplex.back().functionValue, reflection.functionValue))
+			simplex.back() = contraction;
+		else globalContraction();
+	}
+}
+
+void nelderMead::globalContraction()
+{
+	for (int i = 1; i < simplex.size(); i++)
+		simplex[i] = element(simplex[i].point + ((simplex.front().point - simplex[i].point) / 2.0), function);
+}
+
+bool nelderMead::endCheck(double eps, vector<element> simplex)
+{
+	double sum = 0;
+	for (int i = 1; i < simplex.size(); i++)
+	{
+		sum += pow(simplex[i].functionValue - simplex.front().functionValue, 2);
+	}
+	double dist = sqrt(sum / (simplex.size() - 1));
+	return (dist <= eps);
+}
+
+element nelderMead::calculateContraction(element reflection, vector<double> massCenter)
 {
 	element contraction;
-	if (elements.back().functionValue <= reflection.functionValue)
-		contraction = element(massCenter + (elements.back().point - massCenter) * contractionCoeff, function);
-	else contraction = element(massCenter + (reflection.point - massCenter) * contractionCoeff, function);
+	if (simplex.back().functionValue <= reflection.functionValue)
+		contraction = element(massCenter + (simplex.back().point - massCenter) * params.contractionCoeff, function);
+	else contraction = element(massCenter + (reflection.point - massCenter) * params.contractionCoeff, function);
 	return contraction;
 }
 
-string printVector(vector<double> point, int number) {
+void nelderMead::sendPoints()
+{
+	for (int i = 0; i < simplex.size(); i++) {
+		callback(simplex[i].point.data());
+	}
+}
+
+string nelderMead::printVector(vector<double> point, int number)
+{
 	string str = "X" + to_string(number) + "=(";
 	if (number == -1) str = "(";
 	for (int i = 0; i < point.size(); ++i) {
-		str+= to_string(point[i]);
+		str += to_string(point[i]);
 		if (i < point.size() - 1) str += ", ";
 	}
 	str += ")";
 	return str;
 }
 
-void sendPoints(PointsCallback callback, vector<element> elements) {
-	for (int i = 0; i < elements.size(); i++) {
-		callback(elements[i].point.data());
+void nelderMead::makeStartSimplex(int varsCount, vector<double> startingPoint)
+{
+	simplex.push_back(element(startingPoint, function));
+	for (int i = 0; i < varsCount; i++) {
+		vector<double> newPoint(varsCount, 0);
+		newPoint[i] = params.scale;
+		simplex.push_back(element(newPoint, function));
 	}
 }
 
-void to_json(nlohmann::json& j, const NelderMeadParams& p) {
-	j = nlohmann::json{
-		{"reflectionCoeff", p.reflectionCoeff},
-		{"contractionCoeff", p.contractionCoeff},
-		{"expansionCoeff", p.expansionCoeff},
-		{"scale", p.scale},
-		{"eps", p.eps},
-		{"maxSteps", p.maxSteps}
-	};
+vector<double> nelderMead::calculateMassCenter()
+{
+	vector<double> massCenter(simplex.size() - 1);
+	for (int i = 0; i < simplex.size() - 1; i++)
+		massCenter = massCenter + simplex[i].point / (double)(simplex.size() - 1);
+	return massCenter;
 }
 
-void from_json(const nlohmann::json& j, NelderMeadParams& p) {
-	j.at("reflectionCoeff").get_to(p.reflectionCoeff);
-	j.at("contractionCoeff").get_to(p.contractionCoeff);
-	j.at("expansionCoeff").get_to(p.expansionCoeff);
-	j.at("scale").get_to(p.scale);
-	j.at("eps").get_to(p.eps);
-	j.at("maxSteps").get_to(p.maxSteps);
-}
-
-
-NelderMeadParams loadConfig() {
-	NelderMeadParams params;
-	try {
-		ifstream in("config.json");
-		nlohmann::json j;
-		in >> j;
-		params = j.get<NelderMeadParams>();
-		in.close();
+void nelderMead::logSimplex(int k)
+{
+	out << "Шаг №" << k << endl;
+	out << "Вершины симплекса: " << endl;
+	for (int i = 0; i < simplex.size(); i++)
+	{
+		out << printVector(simplex[i].point, i);
+		if (i < simplex.size() - 1) out << ", ";
 	}
-	catch (...) {
-		params = { 1.0, 0.5, 2.0, 1.0, 0.001, 500 };
-		nlohmann::json j = params;
-		ofstream out("config.json");
-		out << j.dump(4);
-		out.close();
-	}
-	return params;
+	out << endl;
 }
 
-double* findFunctionMinimum(PointsCallback callback, int varsCount, double* startingPointPtr, char* function) {
-	NelderMeadParams params = loadConfig();
-	vector<double> startingPoint(startingPointPtr, startingPointPtr + varsCount);
-	ofstream out;
-	out.open("log.txt");
-	vector<element> elements = makeStartSimplex(varsCount, params.scale, startingPoint, function);
-	int k = 0;
-	for (;;) {
-		sort(begin(elements), end(elements), compare);
-		if (callback != nullptr)
-			sendPoints(callback, elements);
-		if (endCheck(params.eps, elements) || k == params.maxSteps) break;
-		k++;
-		out << "Шаг №" << k << endl;
-		out << "Вершины симплекса: " << endl;
-		for (int i = 0; i < elements.size(); i++)
-		{
-			out << printVector(elements[i].point,i);
-			if (i < elements.size() - 1) out << ", ";
-		}
-		out << endl;
-		vector<double> massCenter = calculateMassCenter(elements);
-		element reflection = element(massCenter * (1 + params.reflectionCoeff) - elements.back().point * params.reflectionCoeff, function);
-		out << "Отражение: " << printVector(reflection.point, -1) << endl;
-		if (elements.front().functionValue <= reflection.functionValue && reflection.functionValue <= elements.at(elements.size() - 2).functionValue) {
-			elements.back() = reflection;
-		}
-		else if (reflection.functionValue < elements.front().functionValue) {
-			element expansion = element(massCenter * (1 - params.expansionCoeff) + reflection.point * params.expansionCoeff, function);
-			out << "Растяжение: " << printVector(expansion.point, -1) << endl;
-			if (expansion.functionValue < reflection.functionValue) elements.back() = expansion;
-			else elements.back() = reflection;
-		}
-		else {
-			element contraction = calculateContraction(elements, reflection, massCenter, params.contractionCoeff, function);
-			out << "Сжатие: " << printVector(contraction.point, -1) << endl;
-			if (contraction.functionValue < min(elements.back().functionValue, reflection.functionValue))
-				elements.back() = contraction;
-			else {
-				for (int i = 1; i < elements.size(); i++)
-					elements[i] = element(elements[i].point + ((elements.front().point - elements[i].point) / 2.0), function);
-			}
-		}
-	}
-	out << "Лучшее решение: " << printVector(elements.front().point, -1) << endl;
-	out.close();
-	double* res = new double[varsCount];
-	std::copy(elements.front().point.begin(), elements.front().point.end(), res);
-	return res;
-}
