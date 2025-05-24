@@ -26,19 +26,26 @@ double evaluateFunction(double* pointPtr, int size, char* function) {
 	return result;
 }
 
-nelderMead::nelderMead(pointsCallback callback, char* function)
-{
-	params = loadConfig();
-	out.open("log.txt");
-	this->callback = callback;
-	this->function = function;
+writer* nelderMead::chooseOutput() {
+	if (params.outputType == "txt") {
+		return new txtWriter("log");
+	}
+	else if (params.outputType == "html") {
+		return new htmlWriter("log");
+	}
+	else throw runtime_error("Incorrect output type");
 }
+
+nelderMead::nelderMead(pointsCallback callback, char* function):
+	params(loadConfig()),
+	output(chooseOutput()),
+	callback(callback),
+	function(function) {}
 
 vector<double> nelderMead::start(int varsCount, double* startingPointPtr)
 {
 	vector<double> startingPoint(startingPointPtr, startingPointPtr + varsCount);
 	makeStartSimplex(varsCount, startingPoint);
-	int k = 0;
 	for (int k = 0; k < params.maxSteps; k++) {
 		std::sort(simplex.begin(), simplex.end(),
 			[](const element& a, const element& b) {
@@ -50,8 +57,8 @@ vector<double> nelderMead::start(int varsCount, double* startingPointPtr)
 		logSimplex(k);
 		changeSimplex();
 	}
-	out << "Лучшее решение: " << printVector(simplex.front().point, -1) << endl;
-	out.close();
+	output->write("Лучшее решение: " + printVector(simplex.front().point, -1));
+	output->closeFile();
 	return simplex.front().point;
 }
 
@@ -59,23 +66,43 @@ void nelderMead::changeSimplex()
 {
 	vector<double> massCenter = calculateMassCenter();
 	element reflection = element(massCenter * (1 + params.reflectionCoeff) - simplex.back().point * params.reflectionCoeff, function);
-	out << "Отражение: " << printVector(reflection.point, -1) << endl;
-	if (simplex.front().functionValue <= reflection.functionValue && reflection.functionValue <= simplex.at(simplex.size() - 2).functionValue) {
+	output->write("Отражение: " + printVector(reflection.point, -1));
+	if (isReflectionAcceptable(reflection)) {
 		simplex.back() = reflection;
 	}
-	else if (reflection.functionValue < simplex.front().functionValue) {
-		element expansion = element(massCenter * (1 - params.expansionCoeff) + reflection.point * params.expansionCoeff, function);
-		out << "Растяжение: " << printVector(expansion.point, -1) << endl;
-		if (expansion.functionValue < reflection.functionValue) simplex.back() = expansion;
-		else simplex.back() = reflection;
+	else if (isExpansionNeeded(reflection)) {
+		performExpansion(massCenter, reflection);
 	}
 	else {
-		element contraction = calculateContraction(reflection, massCenter);
-		out << "Сжатие: " << printVector(contraction.point, -1) << endl;
-		if (contraction.functionValue < min(simplex.back().functionValue, reflection.functionValue))
-			simplex.back() = contraction;
-		else globalContraction();
+		performContraction(reflection, massCenter);
 	}
+}
+
+void nelderMead::performContraction(element& reflection, std::vector<double>& massCenter)
+{
+	element contraction = calculateContraction(reflection, massCenter);
+	output->write("Сжатие: " + printVector(contraction.point, -1));
+	if (contraction.functionValue < min(simplex.back().functionValue, reflection.functionValue))
+		simplex.back() = contraction;
+	else globalContraction();
+}
+
+void nelderMead::performExpansion(std::vector<double>& massCenter, element& reflection)
+{
+	element expansion = element(massCenter * (1 - params.expansionCoeff) + reflection.point * params.expansionCoeff, function);
+	output->write("Растяжение: " + printVector(expansion.point, -1));
+	if (expansion.functionValue < reflection.functionValue) simplex.back() = expansion;
+	else simplex.back() = reflection;
+}
+
+bool nelderMead::isExpansionNeeded(element& reflection)
+{
+	return reflection.functionValue < simplex.front().functionValue;
+}
+
+bool nelderMead::isReflectionAcceptable(element& reflection)
+{
+	return simplex.front().functionValue <= reflection.functionValue && reflection.functionValue <= simplex.at(simplex.size() - 2).functionValue;
 }
 
 void nelderMead::globalContraction()
@@ -143,13 +170,14 @@ vector<double> nelderMead::calculateMassCenter()
 
 void nelderMead::logSimplex(int k)
 {
-	out << "Шаг №" << k << endl;
-	out << "Вершины симплекса: " << endl;
+	output->write("Шаг №" + to_string(k));
+	output->write("Вершины симплекса: ");
+	string data;
 	for (int i = 0; i < simplex.size(); i++)
 	{
-		out << printVector(simplex[i].point, i);
-		if (i < simplex.size() - 1) out << ", ";
+		data += printVector(simplex[i].point, i);
+		if (i < simplex.size() - 1) data += ", ";
 	}
-	out << endl;
+	output->write(data);
 }
 

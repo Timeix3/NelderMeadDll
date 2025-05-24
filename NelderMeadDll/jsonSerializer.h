@@ -11,7 +11,8 @@ void to_json(nlohmann::json& j, const nelderMeadParams& p) {
 		{"expansionCoeff", p.expansionCoeff},
 		{"scale", p.scale},
 		{"eps", p.eps},
-		{"maxSteps", p.maxSteps}
+		{"maxSteps", p.maxSteps},
+		{"outputType", p.outputType}
 	};
 }
 
@@ -22,6 +23,7 @@ void from_json(const nlohmann::json& j, nelderMeadParams& p) {
 	j.at("scale").get_to(p.scale);
 	j.at("eps").get_to(p.eps);
 	j.at("maxSteps").get_to(p.maxSteps);
+	j.at("outputType").get_to(p.outputType);
 }
 
 nelderMeadParams loadConfig(string filename = "config.json") {
@@ -34,11 +36,11 @@ nelderMeadParams loadConfig(string filename = "config.json") {
 		in.close();
 	}
 	catch (...) {
-		params = { 1.0, 0.5, 2.0, 1.0, 0.001, 500 };
+		params = { 1.0, 0.5, 2.0, 1.0, 0.001, 500, "txt" };
 		nlohmann::json j = params;
-		ofstream out(filename);
-		out << j.dump(4);
-		out.close();
+		ofstream output(filename);
+		output << j.dump(4);
+		output.close();
 	}
 	return params;
 }
