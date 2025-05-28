@@ -154,8 +154,8 @@ void nelderMead::makeStartSimplex(int varsCount, vector<double> startingPoint)
 {
 	simplex.push_back(element(startingPoint, function));
 	for (int i = 0; i < varsCount; i++) {
-		vector<double> newPoint(varsCount, 0);
-		newPoint[i] = params.scale;
+		vector<double> newPoint(startingPoint);
+		newPoint[i] += params.scale;
 		simplex.push_back(element(newPoint, function));
 	}
 }
